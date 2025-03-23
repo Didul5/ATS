@@ -729,6 +729,137 @@ def main():
                 st.warning("Please upload your resume first.")
             if not input_text:
                 st.warning("Please enter the job description.")
-
-if __name__ == "__main__":
-    main()
+    
+    # Tab 2: Bulk Resume Analysis (modified for cloud environment)
+    with tab2:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.subheader("Bulk Resume Analysis")
+        
+        # Instructions for the user
+        st.info("Upload multiple PDFs for batch analysis against a job description.")
+        
+        # Upload multiple files
+        st.markdown('<div class="file-uploader-container">', unsafe_allow_html=True)
+        st.markdown('<p class="file-uploader-text">Drag and drop multiple resume PDFs below</p>', unsafe_allow_html=True)
+        uploaded_files = st.file_uploader("Upload multiple resumes", type=["pdf"], accept_multiple_files=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Display uploaded files
+        if uploaded_files:
+            st.markdown('<div class="file-pill-container">', unsafe_allow_html=True)
+            st.write("Uploaded files:")
+            for uploaded_file in uploaded_files:
+                # Store the uploaded files in session state
+                st.session_state.uploaded_resumes[uploaded_file.name] = uploaded_file.getvalue()
+                # Display a pill for each file
+                st.markdown(f'<span class="file-pill">{uploaded_file.name}</span>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Clear button for uploaded files
+            if st.button("Clear Uploaded Files"):
+                st.session_state.uploaded_resumes = {}
+                st.experimental_rerun()
+        
+        # Job description input
+        job_description = st.text_area("Enter the Job Description:", key="input_bulk", height=150)
+        
+        # Analysis type selection
+        analysis_type = st.radio(
+            "Select the type of analysis:",
+            ["basic", "improvement", "match"],
+            format_func=lambda x: {
+                "basic": "Basic Analysis", 
+                "improvement": "Improvement Suggestions", 
+                "match": "Match Percentage"
+            }[x],
+            horizontal=True
+        )
+        
+        # Button to start bulk analysis
+        start_bulk_analysis = st.button("Start Bulk Analysis", use_container_width=True, key="start_bulk")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Process bulk analysis
+        if start_bulk_analysis and st.session_state.uploaded_resumes and job_description:
+            with st.spinner("Analyzing resumes... This may take some time depending on the number of files."):
+                result_message = process_uploaded_resumes(job_description, analysis_type)
+                st.success(result_message)
+                
+                # Display results if any
+                if st.session_state.analysis_results:
+                    st.markdown('<div class="result-container">', unsafe_allow_html=True)
+                    st.subheader("Analysis Results")
+                    
+                    # Prepare combined results text for download button
+                    combined_results = ""
+                    
+                    # Sort candidates based on analysis type
+                    if analysis_type == "match":
+                        # Sort candidates by match percentage
+                        sorted_candidates = sorted(
+                            st.session_state.analysis_results.items(),
+                            key=lambda x: x[1]["match_percentage"] if x[1]["match_percentage"] is not None else 0,
+                            reverse=True
+                        )
+                        
+                        st.markdown('<div class="sorting-controls">', unsafe_allow_html=True)
+                        st.markdown('<span class="sort-label">Candidates sorted by match percentage (highest first)</span>', unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    else:
+                        # Sort alphabetically by name
+                        sorted_candidates = sorted(st.session_state.analysis_results.items())
+                    
+                    # Add results to the combined text for download
+                    for name, res in sorted_candidates:
+                        match_str = f" - Match: {res['match_percentage']:.1f}%" if res['match_percentage'] is not None else ""
+                        combined_results += f"## {name}{match_str}\n\n{res['response']}\n\n{'='*80}\n\n"
+                    
+                    # Download button for all results
+                    if len(sorted_candidates) > 0:
+                        st.download_button(
+                            label="Download All Results",
+                            data=combined_results,
+                            file_name=f"bulk_resume_analysis_{analysis_type}.txt",
+                            mime="text/plain"
+                        )
+                    
+                    # Only display individual results for match analysis
+                    if analysis_type == "match":
+                        for candidate_name, result in sorted_candidates:
+                            # Determine match class for color coding
+                            match_class = ""
+                            match_display = ""
+                            
+                            if result["match_percentage"] is not None:
+                                percentage = result["match_percentage"]
+                                if percentage < 50:
+                                    match_class = "low-match"
+                                elif percentage < 75:
+                                    match_class = "medium-match"
+                                else:
+                                    match_class = "high-match"
+                                match_display = f'<span class="match-badge {match_class}">{percentage:.1f}%</span>'
+                            
+                            # Create candidate card with properly closed HTML tags
+                            st.markdown(f'''
+                            <div class="candidate-card">
+                                <div class="candidate-header">
+                                    <span class="candidate-name">{candidate_name}</span>
+                                    {match_display}
+                                </div>
+                                <div class="candidate-content">
+                                    {result["response"]}
+                                </div>
+                            </div>
+                            ''', unsafe_allow_html=True)
+                    else:
+                        # For basic and improvement, just show a message
+                        st.info("Analysis completed. Download the results using the button above.")
+                    
+                    st.markdown('</div>', unsafe_allow_html=True)
+        elif start_bulk_analysis:
+            if not st.session_state.uploaded_resumes:
+                st.warning("Please upload at least one resume.")
+            if not job_description:
+                st.warning("Please enter the job description.")
