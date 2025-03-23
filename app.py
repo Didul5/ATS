@@ -620,7 +620,7 @@ def process_resumes_from_folder(folder_path, job_description, analysis_type):
 # Streamlit App
 # Streamlit App
 def main():
-    set_background_video()
+    
     set_custom_styling()
     
     # Title with gradient background and improved font
