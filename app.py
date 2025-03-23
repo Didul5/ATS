@@ -146,87 +146,6 @@ def process_user_input(user_input):
     if st.session_state.conversation_stage == "greeting":
         # First interaction - greet the user
         st.session_state.conversation_stage = "gathering_info"
-        return "Hello! I'm your AI assistant. I can help you add skills and hobbies that might not be in your resume. Would you like to tell me about your skills or hobbies?"
-    
-    # Process the input to determine if it's a skill, hobby, or general conversation
-    if is_skill(user_input):
-        st.session_state.additional_skills += f" {user_input}"
-        return f"Great! I've added these skills to your profile: {user_input}\n\nDo you have any other skills or perhaps some hobbies you'd like to share?"
-    
-    elif is_hobby(user_input):
-        st.session_state.hobbies += f" {user_input}"
-        return f"Wonderful! I've added these hobbies/interests to your profile: {user_input}\n\nAny other hobbies or skills you'd like to mention?"
-    
-    # General conversation
-    else:
-        # Common questions handling
-        if "help" in user_input.lower():
-            return "I can help you add skills and hobbies to your profile that might not be in your resume. Just tell me about your skills or interests, and I'll categorize and save them for later use in your resume analysis."
-        
-        elif any(word in user_input.lower() for word in ["hello", "hi", "hey"]):
-            return "Hello there! How can I help you today? Would you like to tell me about your skills or hobbies?"
-        
-        elif "thank" in user_input.lower():
-            return "You're welcome! Is there anything else I can help you with?"
-        
-        elif any(word in user_input.lower() for word in ["bye", "goodbye", "exit"]):
-            return "It was nice chatting with you! Your skills and hobbies have been saved. Good luck with your job application!"
-        
-        # Check if it seems like they're trying to add information but we're not sure what type
-        elif len(user_input.split()) > 3:  # If it's a longer message, ask for clarification
-            return f"I'm not sure if you're telling me about skills or hobbies. Could you clarify if '{user_input}' is a skill or a hobby/interest?"
-        
-        # Default response
-        else:
-            return "I'm here to help you add skills and hobbies to your profile. Could you tell me more about your professional skills or personal interests?"
-
-# Function to handle sending messages in chat
-# Function to handle sending messages in chat
-def on_send_message():
-    user_input = st.session_state.user_message
-    if user_input:
-        # Add user message to chat
-        add_chat_message("user", user_input)
-        
-        # Process the message and get a response
-        bot_response = process_user_input(user_input)
-        
-        # Add bot response to chat
-        add_chat_message("bot", bot_response)
-        
-        # Clear the input
-        st.session_state.user_message = ""
-
-# Function to clear skills and hobbies
-def clear_skills():
-    st.session_state.additional_skills = ""
-    st.session_state.hobbies = ""
-
-# Function to extract match percentage from the response
-def extract_match_percentage(response_text):
-    # Look for percentage patterns in the response
-    percentage_pattern = r'(\d{1,3}(?:\.\d+)?)%'
-    match = re.search(percentage_pattern, response_text[:200])  # Look only in the first part of the response
-    
-    if match:
-        return float(match.group(1))
-    else:
-        # Fallback: try to find phrases like "match score: 85"
-        score_pattern = r'match(?:\s+score)?(?:\s*(?:is|:))?\s*(\d{1,3}(?:\.\d+)?)'
-        match = re.search(score_pattern, response_text.lower()[:200])
-        
-        if match:
-            return float(match.group(1))
-    
-    # If no percentage found, return None
-    return None
-
-# Function to process multiple resumes from a folder
-def process_user_input(user_input):
-    # Check conversation stage and respond accordingly
-    if st.session_state.conversation_stage == "greeting":
-        # First interaction - greet the user
-        st.session_state.conversation_stage = "gathering_info"
         return "Hello! I'm your AI assistant for HireSphere. I can help you add skills and hobbies that might not be in your resume. Would you like to tell me about your skills or hobbies?"
     
     # Process the input to determine if it's a skill, hobby, or HireSphere-related question
@@ -269,125 +188,138 @@ def process_user_input(user_input):
     else:
         return "I'm here to help you add skills and hobbies to your profile, or answer questions about HireSphere. Could you tell me more about your professional skills or personal interests?"
 
-# Function to get base64 encoded local video
-def get_base64_video(video_path):
-    try:
-        with open(video_path, "rb") as video_file:
-            video_bytes = video_file.read()
-            base64_video = base64.b64encode(video_bytes).decode()
-            return base64_video
-    except Exception as e:
-        st.error(f"Error loading video: {e}")
-        return None
+# Function to handle sending messages in chat
+def on_send_message():
+    user_input = st.session_state.user_message
+    if user_input:
+        # Add user message to chat
+        add_chat_message("user", user_input)
+        
+        # Process the message and get a response
+        bot_response = process_user_input(user_input)
+        
+        # Add bot response to chat
+        add_chat_message("bot", bot_response)
+        
+        # Clear the input
+        st.session_state.user_message = ""
 
-# Function to add background video using local file
-def set_background_video():
-    # Define a function to download a video from Pexels using their API
-    def download_pexels_video(video_id, api_key, output_path):
-        # Check if the file already exists
-        if os.path.exists(output_path):
-            return output_path
-        
-        # Make a request to the Pexels API to get video details
-        url = f"https://api.pexels.com/videos/videos/{video_id}"
-        headers = {"Authorization": api_key}
-        
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            raise Exception(f"Failed to fetch video details: {response.status_code}")
-        
-        video_data = response.json()
-        
-        # Get the video URL (choose SD version for better performance)
-        video_files = video_data.get("video_files", [])
-        video_file = next((file for file in video_files if file.get("quality") == "sd"), None)
-        
-        if not video_file:
-            # Fallback to the first available file
-            video_file = video_files[0] if video_files else None
-            
-        if not video_file:
-            raise Exception("No video file found")
-        
-        # Download the video
-        video_url = video_file.get("link")
-        video_response = requests.get(video_url, stream=True)
-        
-        if video_response.status_code != 200:
-            raise Exception(f"Failed to download video: {video_response.status_code}")
-        
-        # Save the video locally
-        with open(output_path, 'wb') as f:
-            for chunk in video_response.iter_content(chunk_size=8192):
-                f.write(chunk)
-        
-        return output_path
+# Function to clear skills and hobbies
+def clear_skills():
+    st.session_state.additional_skills = ""
+    st.session_state.hobbies = ""
+
+# Function to extract match percentage from the response
+def extract_match_percentage(response_text):
+    # Look for percentage patterns in the response
+    percentage_pattern = r'(\d{1,3}(?:\.\d+)?)%'
+    match = re.search(percentage_pattern, response_text[:200])  # Look only in the first part of the response
     
+    if match:
+        return float(match.group(1))
+    else:
+        # Fallback: try to find phrases like "match score: 85"
+        score_pattern = r'match(?:\s+score)?(?:\s*(?:is|:))?\s*(\d{1,3}(?:\.\d+)?)'
+        match = re.search(score_pattern, response_text.lower()[:200])
+        
+        if match:
+            return float(match.group(1))
+    
+    # If no percentage found, return None
+    return None
+
+# Function to process multiple resumes from a folder
+def process_resumes_from_folder(folder_path, job_description, analysis_type):
+    """Process multiple resumes from a folder and analyze them against a job description"""
     try:
-        # Define path where video should be saved
-        video_path = "resume_interview_bg.mp4"
+        # Get all PDF files in the specified folder
+        pdf_files = scan_folder_for_resumes(folder_path)
         
-        # You'll need to sign up for a free Pexels API key at https://www.pexels.com/api/
-        api_key = "YOUR_PEXELS_API_KEY"  # Replace with your actual API key
+        if not pdf_files:
+            return "No PDF files found in the specified folder."
         
-        # The video ID from the URL you provided
-        video_id = "5439078"
+        # Reset analysis results
+        st.session_state.analysis_results = {}
         
-        # Download the video if it doesn't exist locally
-        video_path = download_pexels_video(video_id, api_key, video_path)
+        # Select the appropriate prompt based on analysis type
+        if analysis_type == "basic":
+            prompt = input_prompt1
+        elif analysis_type == "improvement":
+            prompt = input_prompt2
+        else:  # "match"
+            prompt = input_prompt3
         
-        # Get base64 encoded video
-        encoded_video = get_base64_video(video_path)
-        
-        if encoded_video:
-            # Create a video element in the background with CSS
-            video_html = f"""
-            <style>
-            #video-bg {{
-                position: fixed;
-                right: 0;
-                bottom: 0;
-                min-width: 100%;
-                min-height: 100%;
-                width: auto;
-                height: auto;
-                z-index: -1;
-                opacity: 0.25;
-                pointer-events: none;
-            }}
+        # Process each resume
+        for idx, pdf_path in enumerate(pdf_files):
+            # Provide progress update
+            st.write(f"Processing file {idx+1}/{len(pdf_files)}: {os.path.basename(pdf_path)}...")
             
-            .stApp {{
-                background: transparent;
-            }}
-            </style>
-            
-            <video autoplay loop muted playsinline id="video-bg">
-                <source src="data:video/mp4;base64,{encoded_video}" type="video/mp4">
-            </video>
-            """
-            st.markdown(video_html, unsafe_allow_html=True)
-        else:
-            # Fallback to gradient background if video loading fails
-            fallback_css = """
-            <style>
-            .stApp {
-                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            }
-            </style>
-            """
-            st.markdown(fallback_css, unsafe_allow_html=True)
-            
+            try:
+                # Read the PDF file
+                with open(pdf_path, 'rb') as pdf_file:
+                    pdf_content = input_pdf_setup(pdf_file.read())
+                
+                # Extract candidate name from filename
+                candidate_name = extract_candidate_name(pdf_path)
+                
+                # Get the analysis
+                response = get_gemini_response(
+                    prompt, 
+                    pdf_content, 
+                    job_description,
+                    st.session_state.additional_skills,
+                    st.session_state.hobbies
+                )
+                
+                # Check if this is a match analysis and extract percentage
+                match_percentage = None
+                if analysis_type == "match":
+                    match_percentage = extract_match_percentage(response)
+                
+                # Store the results
+                st.session_state.analysis_results[candidate_name] = {
+                    "response": response,
+                    "match_percentage": match_percentage
+                }
+                
+            except Exception as e:
+                # Log the error but continue with other files
+                st.error(f"Error processing {os.path.basename(pdf_path)}: {str(e)}")
+                continue
+        
+        # Return success message
+        return f"Successfully analyzed {len(pdf_files)} resumes."
+        
     except Exception as e:
-        st.error(f"Error setting background video: {e}")
-        # Fallback to gradient background
-        fallback_css = """
-        <style>
-        .stApp {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        }
-        </style>
-        """
-        st.markdown(fallback_css, unsafe_allow_html=True)
+        return f"An error occurred: {str(e)}"
+
+# Function to set background image
+def set_background_image():
+    # Define the CSS for the background image
+    background_css = """
+    <style>
+    .stApp {
+        background-image: url("https://images.unsplash.com/photo-1486312338219-ce68d2c6f44d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2072&q=80");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }
+    
+    /* Add an overlay to make content more readable */
+    .stApp::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.7); /* White overlay with 70% opacity */
+        z-index: -1;
+    }
+    </style>
+    """
+    st.markdown(background_css, unsafe_allow_html=True)
 
 # Custom CSS for background and styling
 def set_custom_styling():
@@ -404,10 +336,12 @@ def set_custom_styling():
         margin-bottom: 20px;
         box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
         transition: transform 0.3s ease;
+        border: 1px solid rgba(230, 230, 230, 0.5);
     }
     
     .card:hover {
         transform: translateY(-5px);
+        box-shadow: 0 12px 20px rgba(0, 0, 0, 0.15);
     }
     
     .title-container {
@@ -418,6 +352,7 @@ def set_custom_styling():
         margin-bottom: 30px;
         text-align: center;
         box-shadow: 0 10px 20px rgba(27, 40, 72, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
     
     .title-container h1 {
@@ -446,6 +381,7 @@ def set_custom_styling():
         flex-direction: column;
         font-family: 'Poppins', sans-serif;
         animation: fadeIn 0.5s;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     }
     
     @keyframes fadeIn {
@@ -454,14 +390,14 @@ def set_custom_styling():
     }
     
     .user-message {
-        background-color: #E3F2FD;
+        background-color: rgba(227, 242, 253, 0.9);
         margin-left: 20%;
         border-top-right-radius: 0;
         border-left: 3px solid #4b6cb7;
     }
     
     .bot-message {
-        background-color: white;
+        background-color: rgba(255, 255, 255, 0.9);
         margin-right: 20%;
         border-top-left-radius: 0;
         border-right: 3px solid #4b6cb7;
@@ -488,23 +424,25 @@ def set_custom_styling():
         letter-spacing: 0.5px;
         text-transform: uppercase;
         font-size: 14px;
+        box-shadow: 0 4px 6px rgba(75, 108, 183, 0.2);
     }
     
     .custom-button:hover {
         background-color: #182848;
         transform: translateY(-2px);
-        box-shadow: 0 5px 10px rgba(27, 40, 72, 0.2);
+        box-shadow: 0 6px 12px rgba(27, 40, 72, 0.3);
     }
     
     .result-container {
-        background-color: rgba(255, 255, 255, 0.9);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
+        background-color: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(15px);
+        -webkit-backdrop-filter: blur(15px);
         border-radius: 15px;
         padding: 25px;
         margin-top: 30px;
         box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
         font-family: 'Poppins', sans-serif;
+        border: 1px solid rgba(230, 230, 230, 0.7);
     }
     
     .result-container h3 {
@@ -659,74 +597,9 @@ End with your final thoughts on the candidate's suitability for the role.
 Structure your output in clearly labeled sections.
 """
 
-def process_resumes_from_folder(folder_path, job_description, analysis_type):
-    """Process multiple resumes from a folder and analyze them against a job description"""
-    try:
-        # Get all PDF files in the specified folder
-        pdf_files = scan_folder_for_resumes(folder_path)
-        
-        if not pdf_files:
-            return "No PDF files found in the specified folder."
-        
-        # Reset analysis results
-        st.session_state.analysis_results = {}
-        
-        # Select the appropriate prompt based on analysis type
-        if analysis_type == "basic":
-            prompt = input_prompt1
-        elif analysis_type == "improvement":
-            prompt = input_prompt2
-        else:  # "match"
-            prompt = input_prompt3
-        
-        # Process each resume
-        for idx, pdf_path in enumerate(pdf_files):
-            # Provide progress update
-            st.write(f"Processing file {idx+1}/{len(pdf_files)}: {os.path.basename(pdf_path)}...")
-            
-            try:
-                # Read the PDF file
-                with open(pdf_path, 'rb') as pdf_file:
-                    pdf_content = input_pdf_setup(pdf_file.read())
-                
-                # Extract candidate name from filename
-                candidate_name = extract_candidate_name(pdf_path)
-                
-                # Get the analysis
-                response = get_gemini_response(
-                    prompt, 
-                    pdf_content, 
-                    job_description,
-                    st.session_state.additional_skills,
-                    st.session_state.hobbies
-                )
-                
-                # Check if this is a match analysis and extract percentage
-                match_percentage = None
-                if analysis_type == "match":
-                    match_percentage = extract_match_percentage(response)
-                
-                # Store the results
-                st.session_state.analysis_results[candidate_name] = {
-                    "response": response,
-                    "match_percentage": match_percentage
-                }
-                
-            except Exception as e:
-                # Log the error but continue with other files
-                st.error(f"Error processing {os.path.basename(pdf_path)}: {str(e)}")
-                continue
-        
-        # Return success message
-        return f"Successfully analyzed {len(pdf_files)} resumes."
-        
-    except Exception as e:
-        return f"An error occurred: {str(e)}"
-
-# Streamlit App
 # Streamlit App
 def main():
-    set_background_video()
+    set_background_image()
     set_custom_styling()
     
     # Title with gradient background and improved font
@@ -797,6 +670,49 @@ def main():
                     st.subheader(subheader)
                     st.markdown(response)
                     st.markdown('</div>', unsafe_allow_html=True)
+                
+    # Tab 3: Skills & Hobbies Chatbot
+    with tab3:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.subheader("Skills & Hobbies Chatbot")
+        
+        # Display current skills and hobbies
+        if st.session_state.additional_skills or st.session_state.hobbies:
+            st.markdown("### Your Profile")
+            
+            if st.session_state.additional_skills:
+                st.markdown('<div class="profile-section">', unsafe_allow_html=True)
+                st.markdown("Skills: " + st.session_state.additional_skills)
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            if st.session_state.hobbies:
+                st.markdown('<div class="profile-section">', unsafe_allow_html=True)
+                st.markdown("Hobbies & Interests: " + st.session_state.hobbies)
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Add a button to clear the profile
+            if st.button("Clear Profile", key="clear_profile"):
+                clear_skills()
+                st.experimental_rerun()
+        
+        # Chat interface
+        st.markdown("### Chat with the AI Assistant")
+        st.markdown("Tell me about your skills and hobbies, and I'll add them to your profile for resume analysis.")
+        
+        # Display chat history
+        for message in st.session_state.chat_history:
+            if message["role"] == "user":
+                st.markdown(f'<div class="chat-message user-message">{message["content"]}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="chat-message bot-message">{message["content"]}</div>', unsafe_allow_html=True)
+        
+        # Chat input
+        st.text_input("Type a message...", key="user_message", on_change=on_send_message)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
                     
                 except Exception as e:
                     st.error(f"An error occurred: {str(e)}")
@@ -922,46 +838,3 @@ def main():
                         st.info("Analysis completed. Download the results using the button above.")
                     
                     st.markdown('</div>', unsafe_allow_html=True)
-                
-    # Tab 3: Skills & Hobbies Chatbot
-    with tab3:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("Skills & Hobbies Chatbot")
-        
-        # Display current skills and hobbies
-        if st.session_state.additional_skills or st.session_state.hobbies:
-            st.markdown("### Your Profile")
-            
-            if st.session_state.additional_skills:
-                st.markdown('<div class="profile-section">', unsafe_allow_html=True)
-                st.markdown("**Skills:** " + st.session_state.additional_skills)
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            if st.session_state.hobbies:
-                st.markdown('<div class="profile-section">', unsafe_allow_html=True)
-                st.markdown("**Hobbies & Interests:** " + st.session_state.hobbies)
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Add a button to clear the profile
-            if st.button("Clear Profile", key="clear_profile"):
-                clear_skills()
-                st.experimental_rerun()
-        
-        # Chat interface
-        st.markdown("### Chat with the AI Assistant")
-        st.markdown("Tell me about your skills and hobbies, and I'll add them to your profile for resume analysis.")
-        
-        # Display chat history
-        for message in st.session_state.chat_history:
-            if message["role"] == "user":
-                st.markdown(f'<div class="chat-message user-message">{message["content"]}</div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="chat-message bot-message">{message["content"]}</div>', unsafe_allow_html=True)
-        
-        # Chat input
-        st.text_input("Type a message...", key="user_message", on_change=on_send_message)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-
-if __name__ == "__main__":
-    main()
