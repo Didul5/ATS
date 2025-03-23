@@ -5,12 +5,13 @@ import streamlit as st
 import os
 import io
 from PIL import Image
-import pdf2image
 import google.generativeai as genai
 import time
 import re
 import glob
 import requests
+from io import BytesIO
+import PyPDF2
 
 # Configure the API
 genai.configure(api_key='AIzaSyAaKJbBfqXFwlUBTW3KG9Hcto48GTjN3Qg')
@@ -34,6 +35,9 @@ if 'conversation_stage' not in st.session_state:
 if 'analysis_results' not in st.session_state:
     st.session_state.analysis_results = {}
 
+if 'uploaded_resumes' not in st.session_state:
+    st.session_state.uploaded_resumes = {}
+
 def get_gemini_response(input_prompt, pdf_content, job_description, additional_skills="", hobbies=""):
     # Use the updated model name
     model = genai.GenerativeModel('gemini-1.5-flash')
@@ -52,20 +56,88 @@ def get_gemini_response(input_prompt, pdf_content, job_description, additional_s
     response = model.generate_content([combined_prompt, pdf_content[0]])
     return response.text
 
+def convert_pdf_to_image(pdf_content):
+    """
+    Convert PDF content to an image using PyPDF2 and PIL
+    This avoids the need for Poppler
+    """
+    try:
+        # Read the PDF
+        pdf_reader = PyPDF2.PdfReader(BytesIO(pdf_content))
+        
+        # We need to extract text and create a simple image
+        # For first page only
+        if len(pdf_reader.pages) > 0:
+            page = pdf_reader.pages[0]
+            text = page.extract_text()
+            
+            # Create a simple image with the text
+            # This is a simplified approach - in a production app you might
+            # want a more sophisticated rendering
+            width, height = 1000, 1400  # A4 proportions
+            image = Image.new('RGB', (width, height), color=(255, 255, 255))
+            
+            # Simple text rendering - this is very basic
+            # In a real app, you'd want proper formatting
+            from PIL import ImageDraw, ImageFont
+            draw = ImageDraw.Draw(image)
+            
+            # Try to use a common font that should be available
+            try:
+                font = ImageFont.truetype("Arial", 12)
+            except:
+                # Fallback to default
+                font = ImageFont.load_default()
+            
+            # Draw text on image
+            lines = text.split('\n')
+            y_position = 50
+            for line in lines:
+                draw.text((50, y_position), line, fill=(0, 0, 0), font=font)
+                y_position += 20
+                
+                # Avoid text going off the image
+                if y_position > height - 50:
+                    break
+            
+            # Convert to bytes
+            img_byte_arr = io.BytesIO()
+            image.save(img_byte_arr, format='JPEG')
+            img_byte_arr = img_byte_arr.getvalue()
+            
+            return img_byte_arr
+        
+        # If we couldn't process the PDF, create a simple placeholder image
+        else:
+            width, height = 1000, 1400
+            image = Image.new('RGB', (width, height), color=(255, 255, 255))
+            draw = ImageDraw.Draw(image)
+            draw.text((width//2-100, height//2), "PDF content", fill=(0, 0, 0))
+            
+            img_byte_arr = io.BytesIO()
+            image.save(img_byte_arr, format='JPEG')
+            img_byte_arr = img_byte_arr.getvalue()
+            
+            return img_byte_arr
+            
+    except Exception as e:
+        st.error(f"Error converting PDF: {str(e)}")
+        # Create an error image
+        width, height = 800, 1000
+        image = Image.new('RGB', (width, height), color=(255, 255, 255))
+        draw = ImageDraw.Draw(image)
+        draw.text((width//2-100, height//2), f"Error: {str(e)}", fill=(255, 0, 0))
+        
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format='JPEG')
+        img_byte_arr = img_byte_arr.getvalue()
+        
+        return img_byte_arr
+
 def input_pdf_setup(pdf_content):
     """Convert PDF content to the format required by Gemini API"""
-    # Provide the path to the poppler bin directory
-    poppler_path = r'C:\Users\bhavi\OneDrive\Desktop\poppler\poppler-24.08.0\Library\bin'  # Adjust this path
-    
-    # Convert the PDF to image
-    images = pdf2image.convert_from_bytes(pdf_content, poppler_path=poppler_path)
-    
-    first_page = images[0]
-    
-    # Convert to bytes
-    img_byte_arr = io.BytesIO()
-    first_page.save(img_byte_arr, format='JPEG')
-    img_byte_arr = img_byte_arr.getvalue()
+    # Convert PDF to image (without using Poppler)
+    img_byte_arr = convert_pdf_to_image(pdf_content)
     
     pdf_parts = [
         {
@@ -75,24 +147,9 @@ def input_pdf_setup(pdf_content):
     ]
     return pdf_parts
 
-def scan_folder_for_resumes(folder_path):
-    """Scan a folder for PDF files and return their paths"""
-    # Make sure the folder path exists
-    if not os.path.exists(folder_path):
-        raise FileNotFoundError(f"The folder path {folder_path} does not exist")
-    
-    # Get all PDF files in the folder
-    pdf_files = glob.glob(os.path.join(folder_path, "*.pdf"))
-    
-    # Sort alphabetically to process them in a consistent order
-    pdf_files.sort()
-    
-    return pdf_files
-
-def extract_candidate_name(pdf_path):
-    """Extract the candidate name from the PDF filename"""
-    # Get just the filename without directory and extension
-    filename = os.path.basename(pdf_path)
+def extract_candidate_name(filename):
+    """Extract the candidate name from the filename"""
+    # Get just the filename without extension
     name = os.path.splitext(filename)[0]
     
     # Replace underscores with spaces for better readability
@@ -141,46 +198,6 @@ def is_hobby(text):
     
     return False
 
-def process_user_input(user_input):
-    # Check conversation stage and respond accordingly
-    if st.session_state.conversation_stage == "greeting":
-        # First interaction - greet the user
-        st.session_state.conversation_stage = "gathering_info"
-        return "Hello! I'm your AI assistant. I can help you add skills and hobbies that might not be in your resume. Would you like to tell me about your skills or hobbies?"
-    
-    # Process the input to determine if it's a skill, hobby, or general conversation
-    if is_skill(user_input):
-        st.session_state.additional_skills += f" {user_input}"
-        return f"Great! I've added these skills to your profile: {user_input}\n\nDo you have any other skills or perhaps some hobbies you'd like to share?"
-    
-    elif is_hobby(user_input):
-        st.session_state.hobbies += f" {user_input}"
-        return f"Wonderful! I've added these hobbies/interests to your profile: {user_input}\n\nAny other hobbies or skills you'd like to mention?"
-    
-    # General conversation
-    else:
-        # Common questions handling
-        if "help" in user_input.lower():
-            return "I can help you add skills and hobbies to your profile that might not be in your resume. Just tell me about your skills or interests, and I'll categorize and save them for later use in your resume analysis."
-        
-        elif any(word in user_input.lower() for word in ["hello", "hi", "hey"]):
-            return "Hello there! How can I help you today? Would you like to tell me about your skills or hobbies?"
-        
-        elif "thank" in user_input.lower():
-            return "You're welcome! Is there anything else I can help you with?"
-        
-        elif any(word in user_input.lower() for word in ["bye", "goodbye", "exit"]):
-            return "It was nice chatting with you! Your skills and hobbies have been saved. Good luck with your job application!"
-        
-        # Check if it seems like they're trying to add information but we're not sure what type
-        elif len(user_input.split()) > 3:  # If it's a longer message, ask for clarification
-            return f"I'm not sure if you're telling me about skills or hobbies. Could you clarify if '{user_input}' is a skill or a hobby/interest?"
-        
-        # Default response
-        else:
-            return "I'm here to help you add skills and hobbies to your profile. Could you tell me more about your professional skills or personal interests?"
-
-# Function to handle sending messages in chat
 # Function to handle sending messages in chat
 def on_send_message():
     user_input = st.session_state.user_message
@@ -221,7 +238,6 @@ def extract_match_percentage(response_text):
     # If no percentage found, return None
     return None
 
-# Function to process multiple resumes from a folder
 def process_user_input(user_input):
     # Check conversation stage and respond accordingly
     if st.session_state.conversation_stage == "greeting":
@@ -243,7 +259,7 @@ def process_user_input(user_input):
         return "HireSphere is an advanced ATS (Applicant Tracking System) that uses AI to analyze resumes against job descriptions. You can use it to analyze a single resume or process multiple resumes in bulk. It can provide basic analysis, improvement suggestions, or calculate a match percentage between your resume and a job description."
     
     elif any(keyword in user_input.lower() for keyword in ["analyze resume", "resume analysis", "how to analyze"]):
-        return "To analyze your resume with HireSphere, go to the 'Single Resume Analysis' tab, upload your resume (PDF format), paste the job description, and click one of the analysis buttons. For multiple resumes, use the 'Bulk Resume Analysis' tab and provide a folder path containing PDF resumes."
+        return "To analyze your resume with HireSphere, go to the 'Single Resume Analysis' tab, upload your resume (PDF format), paste the job description, and click one of the analysis buttons. For multiple resumes, use the 'Bulk Resume Analysis' tab where you can upload multiple PDF resumes at once."
     
     elif any(keyword in user_input.lower() for keyword in ["match percentage", "how match works", "calculate match"]):
         return "HireSphere calculates match percentage by comparing keywords and qualifications in your resume against those in the job description. Higher percentages indicate better alignment with the job requirements. The system also identifies missing keywords to help you improve your resume."
@@ -269,19 +285,60 @@ def process_user_input(user_input):
     else:
         return "I'm here to help you add skills and hobbies to your profile, or answer questions about HireSphere. Could you tell me more about your professional skills or personal interests?"
 
-# Function to get base64 encoded local video
-def get_base64_video(video_path):
+# Process multiple resumes
+def process_uploaded_resumes(job_description, analysis_type):
+    """Process uploaded resumes and analyze them against a job description"""
     try:
-        with open(video_path, "rb") as video_file:
-            video_bytes = video_file.read()
-            base64_video = base64.b64encode(video_bytes).decode()
-            return base64_video
+        # Reset analysis results
+        st.session_state.analysis_results = {}
+        
+        # Select the appropriate prompt based on analysis type
+        if analysis_type == "basic":
+            prompt = input_prompt1
+        elif analysis_type == "improvement":
+            prompt = input_prompt2
+        else:  # "match"
+            prompt = input_prompt3
+        
+        # Process each resume
+        for filename, pdf_content in st.session_state.uploaded_resumes.items():
+            try:
+                # Convert the PDF for Gemini
+                gemini_pdf = input_pdf_setup(pdf_content)
+                
+                # Extract candidate name from filename
+                candidate_name = extract_candidate_name(filename)
+                
+                # Get the analysis
+                response = get_gemini_response(
+                    prompt, 
+                    gemini_pdf, 
+                    job_description,
+                    st.session_state.additional_skills,
+                    st.session_state.hobbies
+                )
+                
+                # Check if this is a match analysis and extract percentage
+                match_percentage = None
+                if analysis_type == "match":
+                    match_percentage = extract_match_percentage(response)
+                
+                # Store the results
+                st.session_state.analysis_results[candidate_name] = {
+                    "response": response,
+                    "match_percentage": match_percentage
+                }
+                
+            except Exception as e:
+                # Log the error but continue with other files
+                st.error(f"Error processing {filename}: {str(e)}")
+                continue
+        
+        # Return success message
+        return f"Successfully analyzed {len(st.session_state.uploaded_resumes)} resumes."
+        
     except Exception as e:
-        st.error(f"Error loading video: {e}")
-        return None
-
-# Function to add background video using local file
-
+        return f"An error occurred: {str(e)}"
 
 # Custom CSS for background and styling
 def set_custom_styling():
@@ -526,6 +583,37 @@ def set_custom_styling():
         font-weight: 500;
         font-family: 'Montserrat', sans-serif;
     }
+    
+    /* File uploader enhancements */
+    .file-uploader-container {
+        border: 2px dashed #4b6cb7;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        margin: 20px 0;
+        background-color: rgba(75, 108, 183, 0.05);
+    }
+    
+    .file-uploader-text {
+        color: #4b6cb7;
+        font-family: 'Poppins', sans-serif;
+        margin-bottom: 10px;
+    }
+    
+    /* Pills for uploaded files */
+    .file-pill {
+        background-color: #E3F2FD;
+        padding: 8px 12px;
+        border-radius: 20px;
+        display: inline-block;
+        margin: 5px;
+        font-size: 0.9em;
+        border: 1px solid #BBDEFB;
+    }
+    
+    .file-pill-container {
+        margin: 10px 0;
+    }
     </style>
     """
     st.markdown(background_css, unsafe_allow_html=True)
@@ -553,73 +641,15 @@ End with your final thoughts on the candidate's suitability for the role.
 Structure your output in clearly labeled sections.
 """
 
-def process_resumes_from_folder(folder_path, job_description, analysis_type):
-    """Process multiple resumes from a folder and analyze them against a job description"""
-    try:
-        # Get all PDF files in the specified folder
-        pdf_files = scan_folder_for_resumes(folder_path)
-        
-        if not pdf_files:
-            return "No PDF files found in the specified folder."
-        
-        # Reset analysis results
-        st.session_state.analysis_results = {}
-        
-        # Select the appropriate prompt based on analysis type
-        if analysis_type == "basic":
-            prompt = input_prompt1
-        elif analysis_type == "improvement":
-            prompt = input_prompt2
-        else:  # "match"
-            prompt = input_prompt3
-        
-        # Process each resume
-        for idx, pdf_path in enumerate(pdf_files):
-            # Provide progress update
-            st.write(f"Processing file {idx+1}/{len(pdf_files)}: {os.path.basename(pdf_path)}...")
-            
-            try:
-                # Read the PDF file
-                with open(pdf_path, 'rb') as pdf_file:
-                    pdf_content = input_pdf_setup(pdf_file.read())
-                
-                # Extract candidate name from filename
-                candidate_name = extract_candidate_name(pdf_path)
-                
-                # Get the analysis
-                response = get_gemini_response(
-                    prompt, 
-                    pdf_content, 
-                    job_description,
-                    st.session_state.additional_skills,
-                    st.session_state.hobbies
-                )
-                
-                # Check if this is a match analysis and extract percentage
-                match_percentage = None
-                if analysis_type == "match":
-                    match_percentage = extract_match_percentage(response)
-                
-                # Store the results
-                st.session_state.analysis_results[candidate_name] = {
-                    "response": response,
-                    "match_percentage": match_percentage
-                }
-                
-            except Exception as e:
-                # Log the error but continue with other files
-                st.error(f"Error processing {os.path.basename(pdf_path)}: {str(e)}")
-                continue
-        
-        # Return success message
-        return f"Successfully analyzed {len(pdf_files)} resumes."
-        
-    except Exception as e:
-        return f"An error occurred: {str(e)}"
-
-# Streamlit App
 # Streamlit App
 def main():
+    # Set page config
+    st.set_page_config(
+        page_title="HireSphere - ATS System",
+        page_icon="📝",
+        layout="wide",
+        initial_sidebar_state="collapsed"
+    )
     
     set_custom_styling()
     
@@ -691,32 +721,11 @@ def main():
                     st.subheader(subheader)
                     st.markdown(response)
                     st.markdown('</div>', unsafe_allow_html=True)
-                    
-                except Exception as e:
-                    st.error(f"An error occurred: {str(e)}")
-        elif (submit1 or submit2 or submit3):
-            if not uploaded_file:
-                st.warning("Please upload your resume first.")
-            if not input_text:
-                st.warning("Please enter the job description.")
-    
-    # Tab 2: Bulk Resume Analysis (new functionality)
-    with tab2:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("Bulk Resume Analysis")
-        
-        # Input for the folder path containing resumes
-        folder_path = st.text_input("Enter the folder path containing resumes (e.g., C:/Resumes):", key="folder_path")
-        
-        # Option to browse for folder instead
-        folder_browser_col1, folder_browser_col2 = st.columns([3, 1])
-        with folder_browser_col1:
-            st.markdown("Or select a folder from file browser:")
-        with folder_browser_col2:
-            if st.button("Browse Folders"):
-                # Use a temporary solution to get the folder path
-                # This will require the user to copy-paste the path
-                st.info("Please use your file explorer to navigate to the folder with resumes, then copy-paste the path above.")
+            
+            # Clear button for uploaded files
+            if st.button("Clear Uploaded Files"):
+                st.session_state.uploaded_resumes = {}
+                st.experimental_rerun()
         
         # Job description input
         job_description = st.text_area("Enter the Job Description:", key="input_bulk", height=150)
@@ -739,9 +748,9 @@ def main():
         st.markdown('</div>', unsafe_allow_html=True)
         
         # Process bulk analysis
-        if start_bulk_analysis and folder_path and job_description:
-            with st.spinner("Analyzing resumes in the folder... This may take some time depending on the number of files."):
-                result_message = process_resumes_from_folder(folder_path, job_description, analysis_type)
+        if start_bulk_analysis and st.session_state.uploaded_resumes and job_description:
+            with st.spinner("Analyzing resumes... This may take some time depending on the number of files."):
+                result_message = process_uploaded_resumes(job_description, analysis_type)
                 st.success(result_message)
                 
                 # Display results if any
@@ -816,46 +825,41 @@ def main():
                         st.info("Analysis completed. Download the results using the button above.")
                     
                     st.markdown('</div>', unsafe_allow_html=True)
-                
-    # Tab 3: Skills & Hobbies Chatbot
-    with tab3:
+        elif start_bulk_analysis:
+            if not st.session_state.uploaded_resumes:
+                st.warning("Please upload at least one resume.")
+            if not job_description:
+                st.warning("Please enter the job description.")_allow_html=True)
+                    
+                except Exception as e:
+                    st.error(f"An error occurred: {str(e)}")
+        elif (submit1 or submit2 or submit3):
+            if not uploaded_file:
+                st.warning("Please upload your resume first.")
+            if not input_text:
+                st.warning("Please enter the job description.")
+    
+    # Tab 2: Bulk Resume Analysis (modified for cloud environment)
+    with tab2:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("Skills & Hobbies Chatbot")
+        st.subheader("Bulk Resume Analysis")
         
-        # Display current skills and hobbies
-        if st.session_state.additional_skills or st.session_state.hobbies:
-            st.markdown("### Your Profile")
-            
-            if st.session_state.additional_skills:
-                st.markdown('<div class="profile-section">', unsafe_allow_html=True)
-                st.markdown("*Skills:* " + st.session_state.additional_skills)
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            if st.session_state.hobbies:
-                st.markdown('<div class="profile-section">', unsafe_allow_html=True)
-                st.markdown("*Hobbies & Interests:* " + st.session_state.hobbies)
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Add a button to clear the profile
-            if st.button("Clear Profile", key="clear_profile"):
-                clear_skills()
-                st.experimental_rerun()
+        # Instructions for the user
+        st.info("Upload multiple PDFs for batch analysis against a job description.")
         
-        # Chat interface
-        st.markdown("### Chat with the AI Assistant")
-        st.markdown("Tell me about your skills and hobbies, and I'll add them to your profile for resume analysis.")
-        
-        # Display chat history
-        for message in st.session_state.chat_history:
-            if message["role"] == "user":
-                st.markdown(f'<div class="chat-message user-message">{message["content"]}</div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="chat-message bot-message">{message["content"]}</div>', unsafe_allow_html=True)
-        
-        # Chat input
-        st.text_input("Type a message...", key="user_message", on_change=on_send_message)
-        
+        # Upload multiple files
+        st.markdown('<div class="file-uploader-container">', unsafe_allow_html=True)
+        st.markdown('<p class="file-uploader-text">Drag and drop multiple resume PDFs below</p>', unsafe_allow_html=True)
+        uploaded_files = st.file_uploader("Upload multiple resumes", type=["pdf"], accept_multiple_files=True)
         st.markdown('</div>', unsafe_allow_html=True)
-
-if __name__ == "__main__":
-    main()
+        
+        # Display uploaded files
+        if uploaded_files:
+            st.markdown('<div class="file-pill-container">', unsafe_allow_html=True)
+            st.write("Uploaded files:")
+            for uploaded_file in uploaded_files:
+                # Store the uploaded files in session state
+                st.session_state.uploaded_resumes[uploaded_file.name] = uploaded_file.getvalue()
+                # Display a pill for each file
+                st.markdown(f'<span class="file-pill">{uploaded_file.name}</span>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe
