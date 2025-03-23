@@ -729,3 +729,6 @@ def main():
                 st.warning("Please upload your resume first.")
             if not input_text:
                 st.warning("Please enter the job description.")
+
+if __name__ == "__main__":
+    main()
