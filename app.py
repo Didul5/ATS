@@ -670,6 +670,7 @@ def main():
                     st.subheader(subheader)
                     st.markdown(response)
                     st.markdown('</div>', unsafe_allow_html=True)
+                except Exception as e:
                 
     # Tab 3: Skills & Hobbies Chatbot
     with tab3:
