@@ -10,6 +10,7 @@ import google.generativeai as genai
 import time
 import re
 import glob
+import requests
 
 # Configure the API
 genai.configure(api_key='AIzaSyAaKJbBfqXFwlUBTW3KG9Hcto48GTjN3Qg')
@@ -281,9 +282,60 @@ def get_base64_video(video_path):
 
 # Function to add background video using local file
 def set_background_video():
-    video_path = r"https://www.pexels.com/video/interviewer-evaluating-the-male-aspirant-s-resume-5439078/"
+    # Define a function to download a video from Pexels using their API
+    def download_pexels_video(video_id, api_key, output_path):
+        # Check if the file already exists
+        if os.path.exists(output_path):
+            return output_path
+        
+        # Make a request to the Pexels API to get video details
+        url = f"https://api.pexels.com/videos/videos/{video_id}"
+        headers = {"Authorization": api_key}
+        
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            raise Exception(f"Failed to fetch video details: {response.status_code}")
+        
+        video_data = response.json()
+        
+        # Get the video URL (choose SD version for better performance)
+        video_files = video_data.get("video_files", [])
+        video_file = next((file for file in video_files if file.get("quality") == "sd"), None)
+        
+        if not video_file:
+            # Fallback to the first available file
+            video_file = video_files[0] if video_files else None
+            
+        if not video_file:
+            raise Exception("No video file found")
+        
+        # Download the video
+        video_url = video_file.get("link")
+        video_response = requests.get(video_url, stream=True)
+        
+        if video_response.status_code != 200:
+            raise Exception(f"Failed to download video: {video_response.status_code}")
+        
+        # Save the video locally
+        with open(output_path, 'wb') as f:
+            for chunk in video_response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        
+        return output_path
     
     try:
+        # Define path where video should be saved
+        video_path = "resume_interview_bg.mp4"
+        
+        # You'll need to sign up for a free Pexels API key at https://www.pexels.com/api/
+        api_key = "YOUR_PEXELS_API_KEY"  # Replace with your actual API key
+        
+        # The video ID from the URL you provided
+        video_id = "5439078"
+        
+        # Download the video if it doesn't exist locally
+        video_path = download_pexels_video(video_id, api_key, video_path)
+        
         # Get base64 encoded video
         encoded_video = get_base64_video(video_path)
         
