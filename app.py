@@ -281,7 +281,7 @@ def get_base64_video(video_path):
 
 # Function to add background video using local file
 def set_background_video():
-    video_path = r"C:\Users\bhavi\OneDrive\Desktop\5971459-uhd_4096_2160_25fps.mp4"
+    video_path = r"https://www.pexels.com/video/interviewer-evaluating-the-male-aspirant-s-resume-5439078/"
     
     try:
         # Get base64 encoded video
