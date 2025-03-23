@@ -673,7 +673,7 @@ def main():
                     
                     except Exception as e:
                         st.error(f"An error occurred: {str(e)}")
-                        elif (submit1 or submit2 or submit3):
+            elif (submit1 or submit2 or submit3):
                             if not uploaded_file:
                                 st.warning("Please upload your resume first.")
                             if not input_text:
