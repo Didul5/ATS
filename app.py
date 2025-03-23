@@ -670,15 +670,6 @@ def main():
                     st.subheader(subheader)
                     st.markdown(response)
                     st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    except Exception as e:
-                        st.error(f"An error occurred: {str(e)}")
-            elif (submit1 or submit2 or submit3):
-                            if not uploaded_file:
-                                st.warning("Please upload your resume first.")
-                            if not input_text:
-                                st.warning("Please enter the job description.")
-
                 
     # Tab 3: Skills & Hobbies Chatbot
     with tab3:
@@ -846,4 +837,4 @@ if __name__ == "__main__":
                         # For basic and improvement, just show a message
                         st.info("Analysis completed. Download the results using the button above.")
                     
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)\
