@@ -10,6 +10,7 @@ import google.generativeai as genai
 import time
 import re
 import glob
+import requests
 
 api_key = os.getenv('GOOGLE_API_KEY')
 
@@ -282,62 +283,7 @@ def get_base64_video(video_path):
         return None
 
 # Function to add background video using local file
-def set_background_video():
-    video_path = r"C:\Users\bhavi\Downloads\4434067-uhd_3840_2160_25fps.mp4"
-    
-    try:
-        # Get base64 encoded video
-        encoded_video = get_base64_video(video_path)
-        
-        if encoded_video:
-            # Create a video element in the background with CSS
-            video_html = f"""
-            <style>
-            #video-bg {{
-                position: fixed;
-                right: 0;
-                bottom: 0;
-                min-width: 100%;
-                min-height: 100%;
-                width: auto;
-                height: auto;
-                z-index: -1;
-                opacity: 0.25;
-                pointer-events: none;
-            }}
-            
-            .stApp {{
-                background: transparent;
-            }}
-            </style>
-            
-            <video autoplay loop muted playsinline id="video-bg">
-                <source src="data:video/mp4;base64,{encoded_video}" type="video/mp4">
-            </video>
-            """
-            st.markdown(video_html, unsafe_allow_html=True)
-        else:
-            # Fallback to gradient background if video loading fails
-            fallback_css = """
-            <style>
-            .stApp {
-                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            }
-            </style>
-            """
-            st.markdown(fallback_css, unsafe_allow_html=True)
-            
-    except Exception as e:
-        st.error(f"Error setting background video: {e}")
-        # Fallback to gradient background
-        fallback_css = """
-        <style>
-        .stApp {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        }
-        </style>
-        """
-        st.markdown(fallback_css, unsafe_allow_html=True)
+
 
 # Custom CSS for background and styling
 def set_custom_styling():
@@ -676,7 +622,7 @@ def process_resumes_from_folder(folder_path, job_description, analysis_type):
 # Streamlit App
 # Streamlit App
 def main():
-    set_background_video()
+    
     set_custom_styling()
     
     # Title with gradient background and improved font
@@ -884,12 +830,12 @@ def main():
             
             if st.session_state.additional_skills:
                 st.markdown('<div class="profile-section">', unsafe_allow_html=True)
-                st.markdown("**Skills:** " + st.session_state.additional_skills)
+                st.markdown("Skills: " + st.session_state.additional_skills)
                 st.markdown('</div>', unsafe_allow_html=True)
             
             if st.session_state.hobbies:
                 st.markdown('<div class="profile-section">', unsafe_allow_html=True)
-                st.markdown("**Hobbies & Interests:** " + st.session_state.hobbies)
+                st.markdown("Hobbies & Interests: " + st.session_state.hobbies)
                 st.markdown('</div>', unsafe_allow_html=True)
             
             # Add a button to clear the profile
