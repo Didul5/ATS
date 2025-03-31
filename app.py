@@ -12,8 +12,10 @@ import re
 import glob
 import requests
 
+api_key = os.getenv('GOOGLE_API_KEY')
+
 # Configure the API
-genai.configure(api_key='AIzaSyAaKJbBfqXFwlUBTW3KG9Hcto48GTjN3Qg')
+genai.configure(api_key=api_key)
 
 # Set up session state for chat history
 if 'chat_history' not in st.session_state:
